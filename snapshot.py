@@ -1,7 +1,8 @@
 import os
 import struct
 import numpy as np
-import config
+
+from . import const
 
 def loadInfo(basePath, snapNum):
     
@@ -167,13 +168,13 @@ def loadDataOne(basePath, snapNum, icpu, item="part", fields=None):
     return data # Note: All values are given in the code units.
 
 
-def codeUnits_time(info):
-    invH0_to_sec = config.Mpc_to_km # [1/H0] = Mpc*s/km --> km*s/km --> sec
+def codeUnits_time(info): # utils.py?
+    invH0_to_sec = const.Mpc_to_km # [1/H0] = Mpc*s/km --> km*s/km --> sec
     unit_t = 1/info['H0'] * invH0_to_sec
     return unit_t # sec
 
 
-def codeUnits_mass(info):
+def codeUnits_mass(info): # utils.py?
     unit_m = info['unit_d']* info['unit_l']**3
     return unit_m # g
 
@@ -306,15 +307,3 @@ def loadDataAll(cosmology, basePath, snapNum, item="part", fields=None):
         return filtered_cdata
     
     return cdata
-
-    
-    
-
-
-
-
-
-
-
-
-
