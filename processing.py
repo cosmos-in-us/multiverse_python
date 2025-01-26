@@ -3,52 +3,14 @@ import struct
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+# my functions
 from . import const
+from . import utils
 
-def loadTimeTable(cosmology): #utils.py?
-    
-    if "lcdm" in cosmology:
-        w0 = -1.0
-        wa = 0.0
-    
-    if cosmology == "cpl0":
-        w0 = -1.2
-        wa = 0.8
-    
-    if cosmology == "cpl1":
-        w0 = -0.8
-        wa = -0.8
-    
-    print("\n[Load Time Table]")
-    print(f"  cosmology: {cosmology}")
-    print(f"  (w0, wa) = ({w0}, {wa})")
-    
-    sign_w0 = '+' if w0 >= 0 else ''
-    sign_wa = '+' if wa >= 0 else ''
-
-    # Load time table value
-    basePath_table = "/md/gilee/cosmos-in-us/Multiverse-utils/notebooks/friedmann/" # should be changed
-    fileName_table = f"time_table_cpl{sign_w0}{w0:.1f}{sign_wa}{wa:.1f}.csv"
-    filePath_table = os.path.join(basePath_table, fileName_table)
-    
-    if os.path.exists(filePath_table): 
-        print(f"  Found time table: {filePath_table}")
-    else:
-        print(f"  Not found time table: {filePath_table}")
-
-    table = pd.read_csv(filePath_table, skiprows=4, names=['t', 'tau0', 'tau1', 'a'])
-    table = table.dropna()
-    # t: proper time
-    # tau0: conformal time (a dt)
-    # tau1: conformal time in ramses (a*2 dt) (Here, we need tau1 rather than tau0)
-    # a: scale factor
-    
-    return table
-    
-    
 def computeCSFR(cdata):
     
-    table = loadTimeTable(cdata['header']['cosmology'])
+    table = utils.loadTimeTable(cdata['header']['cosmology'])
     
     # generating bins for histogram
     tp_face = np.linspace(0, 1.1, 101) # code unit
@@ -75,12 +37,14 @@ def computeCSFR(cdata):
     unit_t_in_yr = unit_t * const.sec_to_yr
     unit_m_in_Msun = unit_m * const.g_to_Msun
     
+    Lbox_cMpc = cdata['header']['Lbox_cMpc'] # Mpc
+    
     # Get a cosmic star formation rate
     hist = np.histogram(tp_birth[star], # code unit
                         bins = tp_face, # code unit
                         weights = masses[star]) # code unit
     csfr = hist[0] # code unit
-    csfr *= unit_m_in_Msun / (dt * unit_t_in_yr) / (boxlen * unit_l_in_Mpc)**3 # Msun/yr/cMpc^3
+    csfr *= unit_m_in_Msun / (dt * unit_t_in_yr) / Lbox_cMpc**3 # Msun/yr/cMpc^3
     
 #     # for quick check the results
 #     plt.figure(figsize=(5, 5))
@@ -132,6 +96,7 @@ def writeOverdensity(file, header, array):
     file.write(struct.pack('i', blksz))
 
     print("Writing sliced array ... successfully done!")
+    return None
 
 
 def saveOverdensity(cdata):
@@ -140,12 +105,10 @@ def saveOverdensity(cdata):
     
     cosmology  = cdata['header']['cosmology']
     snapNum    = cdata['header']['snapNum']
-    lmin       = cdata['header']['levelmin']    
+    lmin       = cdata['header']['levelmin']
+    lmax       = cdata['header']['levelmax']
     unit_m     = cdata['header']['unit_m']
     unit_l     = cdata['header']['unit_l']
-    
-    positions  = cdata['positions'] * unit_l * const.cm_to_Mpc # Mpc
-    masses     = cdata['masses'] * unit_m * const.g_to_Msun # Msun
     
     dm   = np.where(cdata['ptype']==1)
     star = np.where(cdata['ptype']==4)
@@ -162,20 +125,28 @@ def saveOverdensity(cdata):
 #     plt.legend(fontsize=13)
 #     plt.tight_layout(pad=0.3)
     
-    box_size   = cdata['header']['boxlen'] * unit_l * const.cm_to_Mpc # Mpc
+    Lbox_cMpc = cdata['header']['Lbox_cMpc']
+    Lbox_pMpc = cdata['header']['Lbox_pMpc']
     grid_size = 2**lmin
-    dgrid = box_size / grid_size # Mpc
+    dgrid = Lbox_cMpc / grid_size # cMpc
     
-    print(f"  Boxsize: {box_size:.2f} Mpc")
+    masses     = cdata['masses'] * unit_m * const.g_to_Msun # Msun
+    positions  = cdata['positions'] * Lbox_cMpc # cMpc
+#     positions  = cdata['positions'] * unit_l * const.cm_to_Mpc # pMpc  
+
+    print(f"  Boxsize: {Lbox_pMpc:.2f} pMpc")
+    print(f"  Boxsize: {Lbox_cMpc:.2f} cMpc")
     print(f"  levelmin: {lmin}")
     print(f"  Grid size: {grid_size}")
+    print(f"  dxini: {dgrid:.6f} cMpc")
+    print(f"  dxini: {Lbox_pMpc / grid_size:.6f} pMpc")
     
     grid = np.zeros((grid_size, grid_size, grid_size))
     indices = (positions / dgrid).astype(int) % grid_size
     for idx, mass in zip(indices[dm], masses[dm]):
         grid[tuple(idx)] += mass # Msun
         
-    mean_density = masses[dm].sum() / (box_size**3) # Msun/Mpc^3
+    mean_density = masses[dm].sum() / (Lbox_cMpc**3) # Msun/Mpc^3
     
     overdensity = (grid / dgrid**3) / mean_density - 1 # rho_bin / rho_mean - 1
     
@@ -196,5 +167,58 @@ def saveOverdensity(cdata):
     with open(output_file, 'wb') as file:
         writeOverdensity(file, header, overdensity)
         print(f"saved {output_file}")
+    
+    return None
 
+
+def readOverdensity(filename):
+    
+    with open(filename, 'rb') as file:
+        
+        # Read header
+        blksz = struct.unpack('i', file.read(4))[0]
+        print("Block size for header: ", blksz)
+        
+        header_format = 'iii ffff ffff'
+        header_size = struct.calcsize(header_format)
+        
+        header_data = struct.unpack(header_format, file.read(header_size))
+        header = {
+            'n1': header_data[0],
+            'n2': header_data[1],
+            'n3': header_data[2],
+            'dxini0': header_data[3],
+            'xoff10': header_data[4],
+            'xoff20': header_data[5],
+            'xoff30': header_data[6],
+            'astart0': header_data[7],
+            'omega_m0': header_data[8],
+            'omega_l0': header_data[9],
+            'h00': header_data[10]
+        }
+        
+        blksz_check = struct.unpack('i', file.read(4))[0]
+        if blksz != blksz_check:
+            raise ValueError("Header block size mismatch!")
+
+        print("Header successfully read!")
+        
+        # Prepare to read data
+        n1, n2, n3 = header['n1'], header['n2'], header['n3']
+        array_shape = (n3, n2, n1)
+        data = np.empty(array_shape, dtype=np.float32)
+
+        # Read data slice by slice
+        for i in range(n3):
+            blksz = struct.unpack('i', file.read(4))[0]
+            
+            slice_data = np.frombuffer(file.read(blksz), dtype=np.float32)
+            data[i, :, :] = slice_data.reshape((n2, n1))
+            
+            blksz_check = struct.unpack('i', file.read(4))[0]
+            if blksz != blksz_check:
+                raise ValueError(f"Data block size mismatch at slice {i}!")
+
+        print("Data successfully read!")
+        return header, data
     

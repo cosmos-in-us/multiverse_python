@@ -2,7 +2,10 @@ import os
 import struct
 import numpy as np
 
+# my functions
 from . import const
+from . import utils
+
 
 def loadInfo(basePath, snapNum):
     
@@ -35,9 +38,25 @@ def loadInfo(basePath, snapNum):
                 except ValueError:
                     pass # leave the value as a string
                 
-                info[key] = value
+                info[key] = value    
     
-    print(f"  keys in info: {info.keys()}")
+    print(f"  Original keys in info: {info.keys()}")
+    
+    # Updated keys
+    ## Convert the code units in cgs
+    unit_t = utils.codeUnits_time(info)
+    unit_m = utils.codeUnits_mass(info)
+    info['unit_t'] = unit_t # sec
+    info['unit_m'] = unit_m # g
+    
+    ## Box size
+    info['Lbox_cMpc'] = 2**info['levelmax'] * const.dx_fin_kpc / 1000
+    info['Lbox_pMpc'] = info['boxlen'] * info['unit_l'] * const.cm_to_Mpc
+    
+    ## Age of the universe
+#     info['age_of_universe'] = # ???
+    
+    print(f"  Updated keys in info: ['unit_t', 'unit_m', 'Lbox_cMpc', 'Lbox_pMpc']") # sorry, you should change here manually as needed
     
     return info
 
@@ -81,9 +100,9 @@ def loadDataOne(basePath, snapNum, icpu, item="part", fields=None):
     filePath = os.path.join(basePath, fileName)
     
     if os.path.exists(filePath):
-        print(f"  Found data: {filePath}")
+        print(f"  Found data: {filePath}") # verbose?
     else:
-        print(f"  Not found data: {filePath}")
+        print(f"  Not found data: {filePath}") # verbose?
     
     data = {}
     
@@ -168,17 +187,6 @@ def loadDataOne(basePath, snapNum, icpu, item="part", fields=None):
     return data # Note: All values are given in the code units.
 
 
-def codeUnits_time(info): # utils.py?
-    invH0_to_sec = const.Mpc_to_km # [1/H0] = Mpc*s/km --> km*s/km --> sec
-    unit_t = 1/info['H0'] * invH0_to_sec
-    return unit_t # sec
-
-
-def codeUnits_mass(info): # utils.py?
-    unit_m = info['unit_d']* info['unit_l']**3
-    return unit_m # g
-
-
 def loadDataAll(cosmology, basePath, snapNum, item="part", fields=None):
     
     print("\n[Load Data]")
@@ -193,25 +201,22 @@ def loadDataAll(cosmology, basePath, snapNum, item="part", fields=None):
     levelmax = info['levelmax']
     ngridmax = info['ngridmax']
     nstep_coarse = info['nstep_coarse']
-    boxlen = info['boxlen'] # side length of a simulation box
-    time = info['time']
+    time = info['time'] # code unit
     aexp = info['aexp']
-    H0 = info['H0'] # km/s/Mpc
-    h = H0 / 100
+    h = info['H0'] / 100
     omega_m = info['omega_m']
     omega_l = info['omega_l']
     omega_k = info['omega_k']
     omega_b = info['omega_b']
+    
+    # cgs units
+    boxlen = info['boxlen'] # side length of a simulation box in code unit
     unit_l = info['unit_l'] # side length of a simulation box in cm
     unit_d = info['unit_d'] # volume mean density in g/cm^3
-    unit_t = info['unit_t'] # will be changed
-    ordering = info['ordering type']
+    unit_t = info['unit_t'] # sec
     
-    ## Convert the code units in cgs
-    unit_t = codeUnits_time(info)
-    unit_m = codeUnits_mass(info)
-    info['unit_t'] = unit_t # sec
-    info['unit_m'] = unit_m # g
+    Lbox_cMpc = info['Lbox_cMpc']
+    Lbox_pMpc = info['Lbox_pMpc']
     
     # Load data file
     ## Count a total number of praticles 

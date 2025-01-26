@@ -12,3 +12,7 @@ Msun_to_kg = 1.989e30
 Msun_to_g  = 1.989e33
 kg_to_Msun = 1/Msun_to_kg
 g_to_Msun  = 1/Msun_to_g
+
+
+# Configuration parameter
+dx_fin_kpc = 1 # resolution
