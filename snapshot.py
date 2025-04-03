@@ -7,7 +7,7 @@ from . import const
 from . import utils
 
 
-def loadInfo(basePath, snapNum):
+def loadInfo(basePath, snapNum, verbose=False):
     
     print("\n[Load Info]")
     
@@ -40,7 +40,8 @@ def loadInfo(basePath, snapNum):
                 
                 info[key] = value    
     
-    print(f"  Original keys in info: {info.keys()}")
+    if verbose:
+        print(f"  Original keys in info: {list(info.keys())}")
     
     # Updated keys
     ## Convert the code units in cgs
@@ -54,9 +55,20 @@ def loadInfo(basePath, snapNum):
     info['Lbox_pMpc'] = info['boxlen'] * info['unit_l'] * const.cm_to_Mpc
     
     ## Age of the universe
-#     info['age_of_universe'] = # ???
-    
-    print(f"  Updated keys in info: ['unit_t', 'unit_m', 'Lbox_cMpc', 'Lbox_pMpc']") # sorry, you should change here manually as needed
+    #     info['age_of_universe'] = # ???
+
+    if verbose:
+
+        if 'aexp' in info and abs(info['Lbox_pMpc'] - info['Lbox_cMpc'] * info['aexp']) > 1e-5:
+            print("    Potential inconsistency: Lbox_pMpc != Lbox_cMpc * aexp")
+            print("    Maybe check if aexp(now) != 1")
+
+        print("  Updated keys in info: ['unit_t', 'unit_m', 'Lbox_cMpc', 'Lbox_pMpc']")
+        print("  Unit conversions (CGS):")
+        print("    - unit_l  [cm]")
+        print("    - unit_d  [g/cm3]")
+        print("    - unit_t  [sec]")
+        print("    - unit_m  [g]")
     
     return info
 
