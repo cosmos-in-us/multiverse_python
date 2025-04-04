@@ -65,10 +65,10 @@ def loadInfo(basePath, snapNum, verbose=False):
 
         print("  Updated keys in info: ['unit_t', 'unit_m', 'Lbox_cMpc', 'Lbox_pMpc']")
         print("  Unit conversions (CGS):")
-        print("    - unit_l  [cm]")
-        print("    - unit_d  [g/cm3]")
-        print("    - unit_t  [sec]")
-        print("    - unit_m  [g]")
+        print("    - unit_l = Lbox_pMpc       [cm]")
+        print("    - unit_d = Mtot/Lbox_pMpc3 [g/cm3]")
+        print("    - unit_t = 1/H0            [sec]")
+        print("    - unit_m = Mtot            [g]")
     
     return info
 
