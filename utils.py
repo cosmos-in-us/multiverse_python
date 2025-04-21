@@ -57,4 +57,33 @@ def loadTimeTable(cosmology):
     
     return table
     
+def computeCriticalDensity_CGS(info):
+    H0 = info['H0']
+    H0_CGS = H0 * const.km_to_Mpc # [Mpc/s/Mpc] = [1/s]
+    rho_crit = 3 * H0_CGS * H0_CGS / 8 / np.pi / const.grav_const # [g/cm3]
+    return rho_crit
+    
+def computeTotalMass_CGS(info):
+    rho_crit = computeCriticalDensity_CGS(info)
+    Lbox_cm = info['Lbox_cMpc'] * const.Mpc_to_cm
+    Mtot = rho_crit * info['omega_m'] * Lbox_cm**3 # [g]
+    return Mtot # [g]
+    
+def computeMassResolution(info, ptype):
+    ptype = ptype.lower()
+    Mtot = computeTotalMass_CGS(info)
+    
+    if ptype in ["gas", "baryon", "bar", "b"]:
+        mass = Mtot * info['omega_b'] / info['omega_m']
+        mass *= 0.5**(info['levelmin']*info['ndim'])
+
+    elif ptype in ["dm", "cdm", "c"]:
+        mass = Mtot * (1 - info['omega_b'] / info['omega_m'])
+        mass *= 0.5**(info['levelmin']*info['ndim'])
+    
+    else: 
+        raise ValueError(f"Invalid particle type: {ptype}")
+    
+    return mass # [g]
+    
     
