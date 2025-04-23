@@ -51,7 +51,8 @@ def loadInfo(basePath, snapNum, verbose=False):
     info['unit_m'] = unit_m # g
     
     ## Box size
-    info['Lbox_cMpc'] = 2**info['levelmax'] * const.dx_fin_kpc / 1000
+#    info['Lbox_cMpc'] = 2**info['levelmax'] * const.dx_fin_kpc / 1000
+    info['Lbox_cMpc'] = info['boxlen'] * info['unit_l'] * const.cm_to_Mpc / info['aexp']
     info['Lbox_pMpc'] = info['boxlen'] * info['unit_l'] * const.cm_to_Mpc
     
     ## Age of the universe
