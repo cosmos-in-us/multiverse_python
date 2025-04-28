@@ -1,4 +1,5 @@
 import os
+import re
 import struct
 import numpy as np
 import pandas as pd
@@ -7,13 +8,14 @@ import matplotlib.pyplot as plt
 # my functions
 from . import const
 from . import utils
+from . import snapshot
 
 def computeCSFR(cdata):
     
     table = utils.loadTimeTable(cdata['header']['cosmology'])
     
     # generating bins for histogram
-    tp_face = np.linspace(0, 1.1, 101) # code unit
+    tp_face = np.linspace(0, 1.1, 301) # code unit
     tp_cent = 0.5 * (tp_face[:-1] + tp_face[1:])
     dt = np.diff(tp_face)[0]
     
@@ -221,4 +223,147 @@ def readOverdensity(filename):
 
         print("Data successfully read!")
         return header, data
+
     
+class MeshStructureProcessor:
+    
+    def __init__(self, basePath):
+        self.basePath = basePath
+        self.info = snapshot.loadInfo(basePath, snapNum=1) # Load the necessary info
+        self.levelmin = self.info['levelmin']
+        self.levelmax = self.info['levelmax']
+        self.ndim = self.info['ndim']
+        
+    def extractMeshStructure(self, outfile_startwith='outfile'):
+        """
+        Extracts the mesh structure from the output file starting with 'outfile_startwith'.
+        """
+        outfile_found = False
+        print(f"basePath = {self.basePath}")
+        for file in os.listdir(self.basePath):
+            if file.startswith(outfile_startwith):
+                print(f"Found outfile: {file}")
+                fileName_out = file
+                outfile_found = True
+        
+        if not outfile_found:
+            raise FileNotFoundError(f"Not found outfile: no file starting with '{outfile_startwith}'")
+        
+        
+        # Check if the simulation completed or not
+        filePath = os.path.join(self.basePath, fileName_out)        
+        with open(filePath) as file:
+            lines = file.readlines()
+        self._detectRunEnd(lines)
+        
+        
+        print(f"\n[Extracting mesh structure]")        
+        pattern_level = "Level\s+(\d+)\s+has\s+(\d+)\s+grids\s+\(\s+(\d+),\s+(\d+),\s+(\d+),\)"
+        pattern_fine  = r"Fine step=\s*(\d+)\s*t=\s*([-+]?\d+\.\d+E[+-]?\d+)\s*dt=\s*([\d\.E+-]+)\s*a=\s*([\d\.E+-]+)\s*mem=\s*([\d\.]+)%\s+([\d\.]+)%"
+
+        level_data    = []
+        finestep_data = []
+        
+        nstep = 0
+        for i, line in enumerate(lines):
+
+            # search find step data
+            if line.startswith(" Fine step=      0"):
+                match = re.search(pattern_fine, lines[i])
+                if match:
+                    step = int(match.group(1))
+                    time = match.group(2)
+                    dt   = match.group(3)
+                    aexp = match.group(4)
+                    finestep_data.append((step, time, dt, aexp))
+                
+            if line.startswith(" Main step"):
+                match = re.search(pattern_fine, lines[i+1]) # next line along 'Main step'
+                if match:
+                    step = int(match.group(1))
+                    time = match.group(2)
+                    dt   = match.group(3)
+                    aexp = match.group(4)
+                    finestep_data.append((step, time, dt, aexp))
+                if not match:
+                    print("No fine step next 'Main step'")
+                    print(i)
+                    print(lines[i])
+                    print(lines[i+1])
+            
+            
+            # search mesh structure (grid counts)
+            if "mesh structure" in line.lower():
+                nstep+=1
+            
+            match = re.search(pattern_level, line)
+            if match:
+                level = int(match.group(1)) # Level
+                grid_count = int(match.group(2)) # grids
+                grid_per_cpu_min = int(match.group(3)) # mininum grids per cpu
+                grid_per_cpu_max = int(match.group(4)) # maxunum grids per cpu
+                grid_per_cpu_avg = int(match.group(5)) # average grids per cpu
+                level_data.append((nstep, level, grid_count, grid_per_cpu_min, grid_per_cpu_max, grid_per_cpu_avg))
+
+        ncells = np.zeros((nstep, self.levelmax), dtype=int)
+        for i in range(len(level_data)):
+            nstep, level, grid_count, _, _, _ = level_data[i]
+            ncells[nstep-1][level-1] = grid_count * 2**self.ndim # number of cells
+
+        aexp = []
+        for i in range(len(finestep_data)):
+            step, time, dt, a = finestep_data[i]
+            aexp.append(float(a))
+        
+        print(f"# aexp   = {len(aexp)}")
+        print(f"# ncells = {len(ncells)}")
+        
+        if len(aexp)!=len(ncells):
+            print(f"WARN: The numbers are not matched!")
+            
+    #     return level_data, finestep_data
+        return aexp, ncells
+
+    
+    def plotMeshStructure(self, aexp, ncells, detectEnd=True, holdback=False, colors=['gray','magenta','r','orange','g','blue','purple','k'], xmin=None, xmax=None, ymin=None, ymax=None):
+        """
+        Plots the mesh structure over scale factor aexp.
+        """
+        plt.figure(figsize=(9, 7.5))
+
+        for c, i in enumerate(range(self.levelmin-1, self.levelmax)): # start from 0
+            plt.plot(aexp, ncells[:, i], c=colors[c], lw=2, label=f"Level {i+1}")
+                        
+        if holdback:
+            for c, i in enumerate(range(self.levelmin, self.levelmax)):
+                a_newlevel = 4**(1/3) * 0.5**(self.levelmax-i)
+                z_newlevel = 1/a_newlevel - 1
+                print(a_newlevel, z_newlevel)
+                plt.axvline(a_newlevel, lw=1, c=colors[c+1], ls="--")
+
+        plt.legend(fontsize=14)
+        plt.yscale('log')
+        
+        if xmin is not None and xmax is not None:
+            plt.xlim(xmin, xmax)
+        
+        if ymin is not None and ymax is not None:
+            plt.ylim(ymin, ymax)
+            
+        plt.xlabel("Scale factor")
+        plt.ylabel("Number of cells")
+        plt.tight_layout()
+        plt.show()
+    
+    
+    def _detectRunEnd(self, lines):
+        """
+        Detects if the run has reached the end by searching for "TOTAL".
+        """
+        for line in lines:
+            if "Run completed" in line:
+                print("RUN reaches the end")
+                return True
+        
+        print("RUN is still ongiong")
+        return False
