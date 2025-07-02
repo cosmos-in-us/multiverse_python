@@ -13,6 +13,7 @@ Msun_to_g  = 1.989e33
 kg_to_Msun = 1/Msun_to_kg
 g_to_Msun  = 1/Msun_to_g
 
+grav_const = 6.6740800e-08 # cm3 g-1 s-2
 
 # Configuration parameter
 dx_fin_kpc = 1 # resolution
