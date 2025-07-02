@@ -7,6 +7,8 @@ from . import const
 
 
 def codeUnits_time(info):
+    # actual code unit is multiplied by a**2
+    # TODO: find and ifx all uses of 'unit_t' if needed
     invH0_to_sec = const.Mpc_to_km # [1/H0] = Mpc*s/km --> km*s/km --> sec
     unit_t = 1/info['H0'] * invH0_to_sec
     return unit_t # sec
